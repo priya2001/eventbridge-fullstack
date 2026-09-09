@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { categories, eventTypes, initialBasics, validateBasics, type EventBasics } from "@/lib/event-basics";
 import { crewRoles, initialCategoryDetails, performerTypes, plannerServices, validateCategoryDetails, type CategoryDetails } from "@/lib/category-details";
 import { durationLabel, initialRequirementDetails, validateRequirementDetails, type RequirementDetails } from "@/lib/requirement-details";
+import { buildRequirementPayload } from "@/lib/submission";
 
 const steps = ["Event basics", "Category details", "Requirements", "Review & submit"];
 
@@ -13,7 +14,9 @@ export default function EventBasicsForm() {
   const [details, setDetails] = useState<CategoryDetails>(initialCategoryDetails);
   const [requirements, setRequirements] = useState<RequirementDetails>(initialRequirementDetails);
   const [attempted, setAttempted] = useState(false);
-  const [requirementsComplete, setRequirementsComplete] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState("");
+  const [submissionId, setSubmissionId] = useState("");
   const basicsErrors = attempted && step === 1 ? validateBasics(basics) : {};
   const detailsErrors = attempted && step === 2 ? validateCategoryDetails(basics, details) : {};
   const requirementErrors = attempted && step === 3 ? validateRequirementDetails(requirements) : {};
@@ -26,7 +29,6 @@ export default function EventBasicsForm() {
   }
   function updateRequirements<K extends keyof RequirementDetails>(field: K, value: RequirementDetails[K]) {
     setRequirements((current) => ({ ...current, [field]: value }));
-    setRequirementsComplete(false);
   }
   function nextFromBasics(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAttempted(true);
@@ -43,7 +45,21 @@ export default function EventBasicsForm() {
   function nextFromRequirements(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAttempted(true);
     if (Object.keys(validateRequirementDetails(requirements)).length) return;
-    setAttempted(false); setRequirementsComplete(true);
+    setAttempted(false); setStep(4);
+  }
+  async function submitRequirement() {
+    setIsSubmitting(true); setSubmissionError("");
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/requirements`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildRequirementPayload(basics, details, requirements)),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || "Unable to submit your requirement.");
+      setSubmissionId(result.requirement.id);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Unable to submit your requirement.");
+    } finally { setIsSubmitting(false); }
   }
   function togglePlannerService(service: string) {
     updateDetails("plannerServices", details.plannerServices.includes(service)
@@ -87,8 +103,9 @@ export default function EventBasicsForm() {
             <div><label htmlFor="durationHours" className="text-sm font-semibold">{durationLabel(basics.category)}</label><input id="durationHours" name="durationHours" type="number" min="0.5" max="24" step="0.5" inputMode="decimal" value={requirements.durationHours} onChange={(e) => updateRequirements("durationHours", e.target.value)} placeholder="e.g. 3" aria-invalid={!!requirementErrors.durationHours} className={inputClass(!!requirementErrors.durationHours)} />{error(requirementErrors.durationHours)}</div>
           </div>
           <div className="mt-6"><label htmlFor="notes" className="text-sm font-semibold">Additional requirements <span className="font-normal text-slate-500">(optional)</span></label><textarea id="notes" name="notes" rows={5} maxLength={1000} value={requirements.notes} onChange={(e) => updateRequirements("notes", e.target.value)} placeholder="Share preferences, setup needs, accessibility requirements, or anything else relevant." className={inputClass(false)} /><p className="mt-2 text-xs text-slate-500">{requirements.notes.length}/1000 characters</p></div>
-          {requirementsComplete && <p className="mt-6 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900">Requirement details are complete. The review and submission screen will be added next; nothing has been submitted yet.</p>}{Object.keys(requirementErrors).length > 0 && <p className="mt-6 text-sm text-red-700">Please fix the highlighted fields to continue.</p>}<Footer onBack={() => { setAttempted(false); setStep(2); }} />
+          {Object.keys(requirementErrors).length > 0 && <p className="mt-6 text-sm text-red-700">Please fix the highlighted fields to continue.</p>}<Footer onBack={() => { setAttempted(false); setStep(2); }} />
         </form>}
+        {step === 4 && <ReviewScreen basics={basics} details={details} requirements={requirements} onEdit={(targetStep) => { setAttempted(false); setSubmissionError(""); setStep(targetStep); }} onSubmit={submitRequirement} isSubmitting={isSubmitting} submissionError={submissionError} submissionId={submissionId} />}
       </div>
     </main>
   );
@@ -99,3 +116,11 @@ function PlannerDetails({ details, errors, update, toggle, inputClass, error }: 
 function PerformerDetails({ details, errors, update, inputClass, error }: DetailProps) { return <div className="grid gap-6 sm:grid-cols-2"><div><label htmlFor="performerType" className="text-sm font-semibold">Performer type</label><select id="performerType" name="performerType" value={details.performerType} onChange={(e) => update("performerType", e.target.value)} className={inputClass(!!errors.performerType)}><option value="">Select performer type</option>{performerTypes.map((type) => <option key={type}>{type}</option>)}</select>{error(errors.performerType)}</div><div><label htmlFor="performerStyle" className="text-sm font-semibold">Preferred genre or style</label><input id="performerStyle" name="performerStyle" value={details.performerStyle} maxLength={100} placeholder="e.g. Bollywood acoustic" onChange={(e) => update("performerStyle", e.target.value)} className={inputClass(!!errors.performerStyle)} />{error(errors.performerStyle)}</div></div>; }
 function CrewDetails({ details, errors, update, inputClass, error }: DetailProps) { return <div className="grid gap-6 sm:grid-cols-2"><div><label htmlFor="crewRole" className="text-sm font-semibold">Crew role</label><select id="crewRole" name="crewRole" value={details.crewRole} onChange={(e) => update("crewRole", e.target.value)} className={inputClass(!!errors.crewRole)}><option value="">Select crew role</option>{crewRoles.map((role) => <option key={role}>{role}</option>)}</select>{error(errors.crewRole)}</div><div><label htmlFor="crewCount" className="text-sm font-semibold">People needed</label><input id="crewCount" name="crewCount" type="number" min="1" inputMode="numeric" value={details.crewCount} onChange={(e) => update("crewCount", e.target.value)} className={inputClass(!!errors.crewCount)} placeholder="e.g. 4" />{error(errors.crewCount)}</div></div>; }
 type DetailProps = { details: CategoryDetails; errors: ReturnType<typeof validateCategoryDetails>; update: <K extends keyof CategoryDetails>(field: K, value: CategoryDetails[K]) => void; inputClass: (hasError: boolean) => string; error: (message?: string, id?: string) => React.ReactNode };
+
+function ReviewScreen({ basics, details, requirements, onEdit, onSubmit, isSubmitting, submissionError, submissionId }: { basics: EventBasics; details: CategoryDetails; requirements: RequirementDetails; onEdit: (step: number) => void; onSubmit: () => void; isSubmitting: boolean; submissionError: string; submissionId: string }) {
+  const categoryName = categories.find((item) => item.value === basics.category)?.label;
+  const categorySummary = basics.category === "planner" ? [details.plannerService, `${details.guestCount} expected guests`, details.plannerServices.join(", ")] : basics.category === "performer" ? [details.performerType, details.performerStyle] : [details.crewRole, `${details.crewCount} people needed`];
+  if (submissionId) return <section className="rounded-2xl border border-teal-200 bg-white p-8 text-center shadow-sm"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-2xl text-teal-800">✓</span><p className="mt-5 text-sm font-semibold text-teal-700">Requirement submitted</p><h2 className="mt-2 text-2xl font-semibold">Your requirement is live.</h2><p className="mt-3 text-slate-600">Saved reference: <span className="font-mono text-sm">{submissionId}</span></p></section>;
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"><div className="mb-7 border-b border-slate-100 pb-6"><p className="text-sm font-medium text-teal-700">Step 4 of 4</p><h2 className="mt-1 text-2xl font-semibold">Review & submit</h2><p className="mt-2 text-sm text-slate-500">Confirm the details before posting your requirement.</p></div><ReviewSection title="Event basics" onEdit={() => onEdit(1)} rows={[["Event", basics.eventName], ["Type", basics.eventType], ["Dates", basics.endDate ? `${basics.startDate} to ${basics.endDate}` : basics.startDate], ["Location", basics.venue ? `${basics.location} · ${basics.venue}` : basics.location], ["Category", categoryName || ""]]} /><ReviewSection title="Category details" onEdit={() => onEdit(2)} rows={categorySummary.map((item, index) => [index === 0 ? "Primary need" : "Details", item])} /><ReviewSection title="Requirements" onEdit={() => onEdit(3)} rows={[["Budget", `₹${Number(requirements.budgetMin).toLocaleString("en-IN")} – ₹${Number(requirements.budgetMax).toLocaleString("en-IN")}`], ["Start time", requirements.preferredTime], [durationLabel(basics.category), requirements.durationHours], ...(requirements.notes ? [["Notes", requirements.notes]] : [])]} />{submissionError && <p role="alert" className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-800">{submissionError}</p>}<div className="mt-8 flex justify-end border-t border-slate-100 pt-6"><button type="button" onClick={onSubmit} disabled={isSubmitting} className="rounded-xl bg-teal-800 px-8 py-3 text-sm font-semibold text-white transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting ? "Submitting…" : "Submit requirement"}</button></div></section>;
+}
+function ReviewSection({ title, rows, onEdit }: { title: string; rows: string[][]; onEdit: () => void }) { return <section className="border-b border-slate-100 py-6 first:pt-0"><div className="flex items-center justify-between"><h3 className="font-semibold">{title}</h3><button type="button" onClick={onEdit} className="text-sm font-semibold text-teal-800 hover:underline">Edit</button></div><dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">{rows.map(([label, value], index) => <div key={`${label}-${index}`}><dt className="text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-800">{value}</dd></div>)}</dl></section>; }

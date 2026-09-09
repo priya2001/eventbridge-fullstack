@@ -8,5 +8,9 @@
     "start": "node --env-file-if-exists=.env src/index.js"
   },
   "engines": { "node": ">=22.9.0" },
-  "dependencies": { "express": "^5.1.0" }
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.1.0",
+    "mongoose": "^9.9.5"
+  }
 }

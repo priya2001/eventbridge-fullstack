@@ -1,6 +1,6 @@
 # EventBridge
 
-Requirement posting app for the GoPratle assignment. This first step provides a Next.js frontend and Express API. The form and MongoDB integration will be added in subsequent steps.
+Requirement posting app for the GoPratle assignment. It provides a four-step Next.js requirement form and an Express + MongoDB API.
 
 ## Requirements
 
@@ -25,7 +25,7 @@ npm run dev:server
 - Frontend: http://localhost:3000
 - Backend health: http://localhost:4000/api/health
 
-The default configuration works without environment files. To customize the backend port, copy `server/.env.example` to `server/.env` and change `PORT`.
+For MongoDB storage, copy `server/.env.example` to `server/.env`, then set `MONGODB_URI` to your MongoDB Atlas connection string. Keep the real `.env` file private. The frontend defaults to `http://localhost:4000`; optionally copy `client/.env.example` to `client/.env.local` to configure a different API URL.
 
 ## Verification
 
@@ -42,13 +42,14 @@ Health endpoint response (HTTP 200):
 {"status":"ok","service":"eventbridge-api"}
 ```
 
-The health endpoint checks that Express is running; it does not check a database connection.
+The health endpoint reports whether the database is connected. Records are saved with `POST /api/requirements`; it returns `201 Created` and the saved record ID when MongoDB is configured.
 
 Production builds use Next.js's supported Webpack option because Turbopack's build workers encountered a local port permission restriction in the development environment.
 
 ## Structure
 
 - `client/`: Next.js App Router, TypeScript, Tailwind CSS
-- `server/src/index.js`: Express server and health route
+- `server/src/index.js`: Express API, validation, MongoDB connection
+- `server/src/requirement.js`: Mongoose requirement model
 
 Do not commit `.env` files or database credentials.
