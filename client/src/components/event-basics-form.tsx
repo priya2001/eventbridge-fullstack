@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { categories, eventTypes, initialBasics, validateBasics, type EventBasics } from "@/lib/event-basics";
 import { crewRoles, initialCategoryDetails, performerTypes, plannerServices, validateCategoryDetails, type CategoryDetails } from "@/lib/category-details";
+import { durationLabel, initialRequirementDetails, validateRequirementDetails, type RequirementDetails } from "@/lib/requirement-details";
 
 const steps = ["Event basics", "Category details", "Requirements", "Review & submit"];
 
@@ -10,17 +11,22 @@ export default function EventBasicsForm() {
   const [step, setStep] = useState(1);
   const [basics, setBasics] = useState<EventBasics>(initialBasics);
   const [details, setDetails] = useState<CategoryDetails>(initialCategoryDetails);
+  const [requirements, setRequirements] = useState<RequirementDetails>(initialRequirementDetails);
   const [attempted, setAttempted] = useState(false);
-  const [detailsComplete, setDetailsComplete] = useState(false);
+  const [requirementsComplete, setRequirementsComplete] = useState(false);
   const basicsErrors = attempted && step === 1 ? validateBasics(basics) : {};
   const detailsErrors = attempted && step === 2 ? validateCategoryDetails(basics, details) : {};
+  const requirementErrors = attempted && step === 3 ? validateRequirementDetails(requirements) : {};
 
   function updateBasics<K extends keyof EventBasics>(field: K, value: EventBasics[K]) {
     setBasics((current) => ({ ...current, [field]: value }));
   }
   function updateDetails<K extends keyof CategoryDetails>(field: K, value: CategoryDetails[K]) {
     setDetails((current) => ({ ...current, [field]: value }));
-    setDetailsComplete(false);
+  }
+  function updateRequirements<K extends keyof RequirementDetails>(field: K, value: RequirementDetails[K]) {
+    setRequirements((current) => ({ ...current, [field]: value }));
+    setRequirementsComplete(false);
   }
   function nextFromBasics(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAttempted(true);
@@ -32,7 +38,12 @@ export default function EventBasicsForm() {
     event.preventDefault(); setAttempted(true);
     const errors = validateCategoryDetails(basics, details);
     if (Object.keys(errors).length) return;
-    setAttempted(false); setDetailsComplete(true);
+    setAttempted(false); setStep(3);
+  }
+  function nextFromRequirements(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setAttempted(true);
+    if (Object.keys(validateRequirementDetails(requirements)).length) return;
+    setAttempted(false); setRequirementsComplete(true);
   }
   function togglePlannerService(service: string) {
     updateDetails("plannerServices", details.plannerServices.includes(service)
@@ -60,12 +71,23 @@ export default function EventBasicsForm() {
           </div>
           <fieldset className="mt-8"><legend className="text-sm font-semibold">Who are you looking for?</legend><p className="mt-1 text-sm text-slate-500">Choose one category for this requirement.</p><div className="mt-4 grid gap-3 sm:grid-cols-3">{categories.map((category) => <label key={category.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition focus-within:ring-2 focus-within:ring-teal-700 ${basics.category === category.value ? "border-teal-700 bg-teal-50" : "border-slate-300 hover:bg-slate-50"}`}><input type="radio" name="category" value={category.value} checked={basics.category === category.value} onChange={() => updateBasics("category", category.value)} className="mt-1 h-4 w-4 accent-teal-800" /><span><span className="block text-sm font-semibold">{category.label}</span><span className="mt-1 block text-xs leading-5 text-slate-600">{category.description}</span></span></label>)}</div>{error(basicsErrors.category)}</fieldset>
           {Object.keys(basicsErrors).length > 0 && <p className="mt-6 text-sm text-red-700">Please fix the highlighted fields to continue.</p>}<Footer />
-        </form> : <form noValidate onSubmit={nextFromDetails} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        </form> : step === 2 ? <form noValidate onSubmit={nextFromDetails} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
           <div className="mb-7 border-b border-slate-100 pb-6"><p className="text-sm font-medium text-teal-700">Step 2 of 4</p><h2 className="mt-1 text-2xl font-semibold">Category details</h2><p className="mt-2 text-sm text-slate-500">Tell us what you need for your {categories.find((item) => item.value === basics.category)?.label.toLowerCase()} requirement.</p></div>
           {basics.category === "planner" && <PlannerDetails details={details} errors={detailsErrors} update={updateDetails} toggle={togglePlannerService} inputClass={inputClass} error={error} />}
           {basics.category === "performer" && <PerformerDetails details={details} errors={detailsErrors} update={updateDetails} inputClass={inputClass} error={error} />}
           {basics.category === "crew" && <CrewDetails details={details} errors={detailsErrors} update={updateDetails} inputClass={inputClass} error={error} />}
-          {detailsComplete && <p className="mt-6 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900">Category details are complete. Step 3 requirements will be added next; nothing has been submitted yet.</p>}{Object.keys(detailsErrors).length > 0 && <p className="mt-6 text-sm text-red-700">Please fix the highlighted fields to continue.</p>}<Footer onBack={() => { setAttempted(false); setStep(1); }} />
+          {Object.keys(detailsErrors).length > 0 && <p className="mt-6 text-sm text-red-700">Please fix the highlighted fields to continue.</p>}<Footer onBack={() => { setAttempted(false); setStep(1); }} />
+        </form> : null}
+        {step === 3 && <form noValidate onSubmit={nextFromRequirements} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+          <div className="mb-7 border-b border-slate-100 pb-6"><p className="text-sm font-medium text-teal-700">Step 3 of 4</p><h2 className="mt-1 text-2xl font-semibold">Requirement details</h2><p className="mt-2 text-sm text-slate-500">Share your budget, timing and any final details.</p></div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div><label htmlFor="budgetMin" className="text-sm font-semibold">Minimum budget (₹)</label><input id="budgetMin" name="budgetMin" type="number" min="0" inputMode="numeric" value={requirements.budgetMin} onChange={(e) => updateRequirements("budgetMin", e.target.value)} placeholder="e.g. 15000" aria-invalid={!!requirementErrors.budgetMin} className={inputClass(!!requirementErrors.budgetMin)} />{error(requirementErrors.budgetMin)}</div>
+            <div><label htmlFor="budgetMax" className="text-sm font-semibold">Maximum budget (₹)</label><input id="budgetMax" name="budgetMax" type="number" min="0" inputMode="numeric" value={requirements.budgetMax} onChange={(e) => updateRequirements("budgetMax", e.target.value)} placeholder="e.g. 30000" aria-invalid={!!requirementErrors.budgetMax} className={inputClass(!!requirementErrors.budgetMax)} />{error(requirementErrors.budgetMax)}</div>
+            <div><label htmlFor="preferredTime" className="text-sm font-semibold">Preferred start time</label><input id="preferredTime" name="preferredTime" type="time" value={requirements.preferredTime} onChange={(e) => updateRequirements("preferredTime", e.target.value)} aria-invalid={!!requirementErrors.preferredTime} className={inputClass(!!requirementErrors.preferredTime)} />{error(requirementErrors.preferredTime)}</div>
+            <div><label htmlFor="durationHours" className="text-sm font-semibold">{durationLabel(basics.category)}</label><input id="durationHours" name="durationHours" type="number" min="0.5" max="24" step="0.5" inputMode="decimal" value={requirements.durationHours} onChange={(e) => updateRequirements("durationHours", e.target.value)} placeholder="e.g. 3" aria-invalid={!!requirementErrors.durationHours} className={inputClass(!!requirementErrors.durationHours)} />{error(requirementErrors.durationHours)}</div>
+          </div>
+          <div className="mt-6"><label htmlFor="notes" className="text-sm font-semibold">Additional requirements <span className="font-normal text-slate-500">(optional)</span></label><textarea id="notes" name="notes" rows={5} maxLength={1000} value={requirements.notes} onChange={(e) => updateRequirements("notes", e.target.value)} placeholder="Share preferences, setup needs, accessibility requirements, or anything else relevant." className={inputClass(false)} /><p className="mt-2 text-xs text-slate-500">{requirements.notes.length}/1000 characters</p></div>
+          {requirementsComplete && <p className="mt-6 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900">Requirement details are complete. The review and submission screen will be added next; nothing has been submitted yet.</p>}{Object.keys(requirementErrors).length > 0 && <p className="mt-6 text-sm text-red-700">Please fix the highlighted fields to continue.</p>}<Footer onBack={() => { setAttempted(false); setStep(2); }} />
         </form>}
       </div>
     </main>
